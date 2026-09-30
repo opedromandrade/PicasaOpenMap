@@ -700,9 +700,63 @@ picasa.notifyPicasa = function (a) {
   document.getElementById(a).click();
 };
 
-// Geocoding is not implemented in this Leaflet port.
+// Geocoding is implemented in this Leaflet port.
 picasa.search = function (a, b, d) {
-  document.getElementById('searchErrorDiv').style.display = 'block';
+  if (!picasa.geoPanelData || !picasa.geoPanelData.map_) return;
+
+  // Nominatim requires identifying the app via User-Agent (set in setRequestHeader below).
+  var searchUrl =
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' +
+    encodeURIComponent(a);
+
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+
+      if (xhr.status === 200) {
+        var results = null;
+        try {
+          results = JSON.parse(xhr.responseText);
+        } catch (parseErr) {
+          picasa.log('picasa.search - JSON parse error: ' + parseErr);
+          document.getElementById('searchErrorDiv').style.display = 'block';
+          return;
+        }
+
+        if (results && results.length > 0) {
+          var r = results[0];
+          var g = L.latLng(parseFloat(r.lat), parseFloat(r.lon));
+
+          picasa.geoPanelData.infoWindow_.setAutoPanning(!1);
+          picasa.geoPanelData.map_.setView(g);
+
+          var marker = picasa.createSearchMarker(g, d, b, r.display_name);
+          if (marker) {
+            picasa.openMarkerInfoWindow(marker, r.display_name, b);
+          }
+
+          setTimeout(function () {
+            picasa.geoPanelData.infoWindow_.setAutoPanning(!0);
+          }, 2000);
+        } else {
+          picasa.log('picasa.search - No results');
+          document.getElementById('searchErrorDiv').style.display = 'block';
+        }
+      } else {
+        picasa.log('picasa.search - HTTP error: ' + xhr.status);
+        document.getElementById('searchErrorDiv').style.display = 'block';
+      }
+    };
+
+    xhr.open('GET', searchUrl, true);
+    // Nominatim usage policy requires a User-Agent identifying the application.
+    xhr.setRequestHeader('User-Agent', 'PicasaOpenMap/1.0');
+    xhr.send();
+  } catch (err) {
+    picasa.log('picasa.search - Error: ' + err);
+    document.getElementById('searchErrorDiv').style.display = 'block';
+  }
 };
 
 picasa.ScriptQueueClass = (function () {
